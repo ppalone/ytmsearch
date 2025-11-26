@@ -16,44 +16,7 @@ type intertubeSearchResponse struct {
 				TabRenderer struct {
 					Content struct {
 						SectionListRenderer struct {
-							Contents []struct {
-								MusicShelfRenderer struct {
-									Contents []struct {
-										MusicResponsiveListItemRenderer struct {
-											Thumbnail struct {
-												MusicThumbnailRenderer struct {
-													Thumbnail struct {
-														Thumbnails []struct {
-															URL    string `json:"url"`
-															Width  int    `json:"width"`
-															Height int    `json:"height"`
-														} `json:"thumbnails"`
-													} `json:"thumbnail"`
-												} `json:"musicThumbnailRenderer"`
-											} `json:"thumbnail"`
-											FlexColumns []struct {
-												MusicResponsiveListItemFlexColumnRenderer struct {
-													Text struct {
-														Runs []struct {
-															Text               string `json:"text"`
-															NavigationEndpoint struct {
-																WatchEndpoint struct {
-																	VideoID string `json:"videoId"`
-																} `json:"watchEndpoint"`
-															} `json:"navigationEndpoint"`
-														} `json:"runs"`
-													} `json:"text"`
-												} `json:"musicResponsiveListItemFlexColumnRenderer"`
-											} `json:"flexColumns"`
-										} `json:"musicResponsiveListItemRenderer"`
-									} `json:"contents"`
-									Continuations []struct {
-										NextContinuationData struct {
-											Continuation string `json:"continuation"`
-										} `json:"nextContinuationData"`
-									} `json:"continuations"`
-								} `json:"musicShelfRenderer"`
-							} `json:"contents"`
+							Contents []intertubeContent `json:"contents"`
 						} `json:"sectionListRenderer"`
 					} `json:"content"`
 				} `json:"tabRenderer"`
@@ -62,7 +25,46 @@ type intertubeSearchResponse struct {
 	} `json:"contents"`
 }
 
-func (r *intertubeSearchResponse) toResults(searchType SearchType) (SearchResults, error) {
+type intertubeContent struct {
+	MusicShelfRenderer struct {
+		Contents []struct {
+			MusicResponsiveListItemRenderer struct {
+				Thumbnail struct {
+					MusicThumbnailRenderer struct {
+						Thumbnail struct {
+							Thumbnails []struct {
+								URL    string `json:"url"`
+								Width  int    `json:"width"`
+								Height int    `json:"height"`
+							} `json:"thumbnails"`
+						} `json:"thumbnail"`
+					} `json:"musicThumbnailRenderer"`
+				} `json:"thumbnail"`
+				FlexColumns []struct {
+					MusicResponsiveListItemFlexColumnRenderer struct {
+						Text struct {
+							Runs []struct {
+								Text               string `json:"text"`
+								NavigationEndpoint struct {
+									WatchEndpoint struct {
+										VideoID string `json:"videoId"`
+									} `json:"watchEndpoint"`
+								} `json:"navigationEndpoint"`
+							} `json:"runs"`
+						} `json:"text"`
+					} `json:"musicResponsiveListItemFlexColumnRenderer"`
+				} `json:"flexColumns"`
+			} `json:"musicResponsiveListItemRenderer"`
+		} `json:"contents"`
+		Continuations []struct {
+			NextContinuationData struct {
+				Continuation string `json:"continuation"`
+			} `json:"nextContinuationData"`
+		} `json:"continuations"`
+	} `json:"musicShelfRenderer"`
+}
+
+func (r *intertubeSearchResponse) toResults() (SearchResults, error) {
 	tabs := r.Contents.TabbedSearchResultsRenderer.Tabs
 	if len(tabs) == 0 {
 		return SearchResults{}, ErrNoResults
@@ -73,8 +75,11 @@ func (r *intertubeSearchResponse) toResults(searchType SearchType) (SearchResult
 	if len(contents) == 0 {
 		return SearchResults{}, ErrNoResults
 	}
-	content := contents[0]
 
+	return extract(contents[0]), nil
+}
+
+func extract(content intertubeContent) SearchResults {
 	items := make([]MusicItem, 0)
 	for _, c := range content.MusicShelfRenderer.Contents {
 
@@ -110,19 +115,18 @@ func (r *intertubeSearchResponse) toResults(searchType SearchType) (SearchResult
 		meta := cols[1].MusicResponsiveListItemFlexColumnRenderer.Text.Runs
 		var views, duration string
 
-		n := len(meta)
-		switch searchType {
-		case SONGS:
-			duration = meta[n-1].Text
-			if len(cols) > 2 {
-				count := cols[2].MusicResponsiveListItemFlexColumnRenderer.Text.Runs
-				if len(count) > 0 {
-					views = strings.TrimSuffix(count[0].Text, " plays")
-				}
+		n := len(cols)
+		m := len(meta)
+		switch n {
+		case 3: // songs
+			duration = meta[m-1].Text
+			count := cols[2].MusicResponsiveListItemFlexColumnRenderer.Text.Runs
+			if len(count) > 0 {
+				views = strings.TrimSuffix(count[0].Text, " plays")
 			}
-		case VIDEOS:
-			duration = meta[n-1].Text
-			views = strings.TrimSuffix(meta[n-3].Text, " views")
+		case 2: // videos
+			duration = meta[m-1].Text
+			views = strings.TrimSuffix(meta[m-3].Text, " views")
 		default:
 			continue
 		}
@@ -146,5 +150,5 @@ func (r *intertubeSearchResponse) toResults(searchType SearchType) (SearchResult
 		Results:      items,
 		HasNext:      len(continuation) != 0,
 		Continuation: continuation,
-	}, nil
+	}
 }

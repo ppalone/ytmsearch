@@ -82,7 +82,7 @@ func (c *YTMSearch) search(ctx context.Context, q string, filters *searchFilters
 		return SearchResults{}, err
 	}
 
-	return apiResponse.toResults(filters.searchType)
+	return apiResponse.toResults()
 }
 
 func makeRequest(ctx context.Context, body map[string]string, _ url.Values) (*http.Request, error) {
