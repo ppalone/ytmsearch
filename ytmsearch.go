@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
+	"strings"
 )
 
 const (
@@ -55,6 +55,10 @@ func (c *YTMSearch) Search(ctx context.Context, q string, filters ...SearchFilte
 	return c.search(ctx, q, f)
 }
 
+func (c *YTMSearch) SearchNext(ctx context.Context, continuation string) (SearchResults, error) {
+	return c.searchNext(ctx, continuation)
+}
+
 func (c *YTMSearch) search(ctx context.Context, q string, filters *searchFilters) (SearchResults, error) {
 	searchFilter, ok := searchFiltersMap[filters.searchType]
 	if !ok {
@@ -75,6 +79,7 @@ func (c *YTMSearch) search(ctx context.Context, q string, filters *searchFilters
 	if err != nil {
 		return SearchResults{}, err
 	}
+	defer resp.Body.Close()
 
 	apiResponse := new(intertubeSearchResponse)
 	err = json.NewDecoder(resp.Body).Decode(apiResponse)
@@ -85,7 +90,38 @@ func (c *YTMSearch) search(ctx context.Context, q string, filters *searchFilters
 	return apiResponse.toResults()
 }
 
-func makeRequest(ctx context.Context, body map[string]string, _ url.Values) (*http.Request, error) {
+func (c *YTMSearch) searchNext(ctx context.Context, continuation string) (SearchResults, error) {
+	continuation = strings.TrimSpace(continuation)
+	if len(continuation) == 0 {
+		return SearchResults{}, fmt.Errorf("continuation token is required")
+	}
+
+	params := map[string]string{
+		"ctoken":       continuation,
+		"continuation": continuation,
+		"type":         "next",
+	}
+	req, err := makeRequest(ctx, nil, params)
+	if err != nil {
+		return SearchResults{}, nil
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return SearchResults{}, err
+	}
+	defer resp.Body.Close()
+
+	apiResponse := new(innertubeContinuationResponse)
+	err = json.NewDecoder(resp.Body).Decode(apiResponse)
+	if err != nil {
+		return SearchResults{}, err
+	}
+
+	return apiResponse.toNextResults()
+}
+
+func makeRequest(ctx context.Context, body map[string]string, params map[string]string) (*http.Request, error) {
 	payload := map[string]any{
 		"context": map[string]any{
 			"client": map[string]any{
@@ -112,8 +148,14 @@ func makeRequest(ctx context.Context, body map[string]string, _ url.Values) (*ht
 		return nil, err
 	}
 
-	// TODO: add params to request
+	q := req.URL.Query()
+	for k, v := range params {
+		q.Set(k, v)
+	}
 
+	// add query params
+	req.URL.RawQuery = q.Encode()
 	req.Header.Set("Content-Type", "application/json")
+
 	return req, nil
 }

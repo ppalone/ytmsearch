@@ -16,7 +16,9 @@ type intertubeSearchResponse struct {
 				TabRenderer struct {
 					Content struct {
 						SectionListRenderer struct {
-							Contents []intertubeContent `json:"contents"`
+							Contents []struct {
+								MusicShelfRenderer innertubeContent `json:"musicShelfRenderer"`
+							} `json:"contents"`
 						} `json:"sectionListRenderer"`
 					} `json:"content"`
 				} `json:"tabRenderer"`
@@ -25,43 +27,47 @@ type intertubeSearchResponse struct {
 	} `json:"contents"`
 }
 
-type intertubeContent struct {
-	MusicShelfRenderer struct {
-		Contents []struct {
-			MusicResponsiveListItemRenderer struct {
-				Thumbnail struct {
-					MusicThumbnailRenderer struct {
-						Thumbnail struct {
-							Thumbnails []struct {
-								URL    string `json:"url"`
-								Width  int    `json:"width"`
-								Height int    `json:"height"`
-							} `json:"thumbnails"`
-						} `json:"thumbnail"`
-					} `json:"musicThumbnailRenderer"`
-				} `json:"thumbnail"`
-				FlexColumns []struct {
-					MusicResponsiveListItemFlexColumnRenderer struct {
-						Text struct {
-							Runs []struct {
-								Text               string `json:"text"`
-								NavigationEndpoint struct {
-									WatchEndpoint struct {
-										VideoID string `json:"videoId"`
-									} `json:"watchEndpoint"`
-								} `json:"navigationEndpoint"`
-							} `json:"runs"`
-						} `json:"text"`
-					} `json:"musicResponsiveListItemFlexColumnRenderer"`
-				} `json:"flexColumns"`
-			} `json:"musicResponsiveListItemRenderer"`
-		} `json:"contents"`
-		Continuations []struct {
-			NextContinuationData struct {
-				Continuation string `json:"continuation"`
-			} `json:"nextContinuationData"`
-		} `json:"continuations"`
-	} `json:"musicShelfRenderer"`
+type innertubeContinuationResponse struct {
+	ContinuationContents struct {
+		MusicShelfContinuation innertubeContent `json:"musicShelfContinuation"`
+	} `json:"continuationContents"`
+}
+
+type innertubeContent struct {
+	Contents []struct {
+		MusicResponsiveListItemRenderer struct {
+			Thumbnail struct {
+				MusicThumbnailRenderer struct {
+					Thumbnail struct {
+						Thumbnails []struct {
+							URL    string `json:"url"`
+							Width  int    `json:"width"`
+							Height int    `json:"height"`
+						} `json:"thumbnails"`
+					} `json:"thumbnail"`
+				} `json:"musicThumbnailRenderer"`
+			} `json:"thumbnail"`
+			FlexColumns []struct {
+				MusicResponsiveListItemFlexColumnRenderer struct {
+					Text struct {
+						Runs []struct {
+							Text               string `json:"text"`
+							NavigationEndpoint struct {
+								WatchEndpoint struct {
+									VideoID string `json:"videoId"`
+								} `json:"watchEndpoint"`
+							} `json:"navigationEndpoint"`
+						} `json:"runs"`
+					} `json:"text"`
+				} `json:"musicResponsiveListItemFlexColumnRenderer"`
+			} `json:"flexColumns"`
+		} `json:"musicResponsiveListItemRenderer"`
+	} `json:"contents"`
+	Continuations []struct {
+		NextContinuationData struct {
+			Continuation string `json:"continuation"`
+		} `json:"nextContinuationData"`
+	} `json:"continuations"`
 }
 
 func (r *intertubeSearchResponse) toResults() (SearchResults, error) {
@@ -76,12 +82,16 @@ func (r *intertubeSearchResponse) toResults() (SearchResults, error) {
 		return SearchResults{}, ErrNoResults
 	}
 
-	return extract(contents[0]), nil
+	return extract(contents[0].MusicShelfRenderer), nil
 }
 
-func extract(content intertubeContent) SearchResults {
+func (r *innertubeContinuationResponse) toNextResults() (SearchResults, error) {
+	return extract(r.ContinuationContents.MusicShelfContinuation), nil
+}
+
+func extract(content innertubeContent) SearchResults {
 	items := make([]MusicItem, 0)
-	for _, c := range content.MusicShelfRenderer.Contents {
+	for _, c := range content.Contents {
 
 		// get thumbnails
 		thumbnails := make([]Thumbnail, 0)
@@ -141,7 +151,7 @@ func extract(content intertubeContent) SearchResults {
 	}
 
 	continuation := ""
-	c := content.MusicShelfRenderer.Continuations
+	c := content.Continuations
 	if len(c) > 0 {
 		continuation = c[0].NextContinuationData.Continuation
 	}
