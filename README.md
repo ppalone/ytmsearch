@@ -32,7 +32,7 @@ if err != nil {
 }
 
 // res.Results contains search results
-for _, song := res.Results {
+for _, song := range res.Results {
   fmt.Println(song)
 }
 ```
